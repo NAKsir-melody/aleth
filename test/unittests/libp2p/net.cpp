@@ -218,6 +218,14 @@ struct TestNodeTable: public NodeTable
         return promise.get_future().get();
     }
 
+    bool addKnownNode(Node const& _node)
+    {
+        // current time as lastPongReceivedTime makes node table think that endpoint proof has been
+        // completed
+        return addNode(
+            _node, RLPXDatagramFace::secondsSinceEpoch(), RLPXDatagramFace::secondsSinceEpoch());
+    }
+
 
     concurrent_queue<bytes> packetsReceived;
 
@@ -505,9 +513,8 @@ BOOST_AUTO_TEST_CASE(noteActiveNodeEvictsTheNodeWhenBucketIsFull)
     auto leastRecentlySeenNode = nodeTable->bucketFirstNode(bucketIndex);
 
     auto const port = getRandomPortNumber();
-    nodeTable->addNode(
-        Node(newNodeId, NodeIPEndpoint(bi::address::from_string(c_localhostIp), port, port)),
-        RLPXDatagramFace::secondsSinceEpoch(), RLPXDatagramFace::secondsSinceEpoch());
+    nodeTable->addKnownNode(
+        Node(newNodeId, NodeIPEndpoint(bi::address::from_string(c_localhostIp), port, port)));
 
     // wait for eviction
     evictEvents.pop();
@@ -536,8 +543,7 @@ BOOST_AUTO_TEST_CASE(noteActiveNodeReplacesNodeInFullBucketWhenEndpointChanged)
     // endpoint
     auto const port = getRandomPortNumber();
     NodeIPEndpoint newEndpoint{bi::address::from_string(c_localhostIp), port, port };
-    nodeTable->addNode(Node(leastRecentlySeenNodeId, newEndpoint),
-        RLPXDatagramFace::secondsSinceEpoch(), RLPXDatagramFace::secondsSinceEpoch());
+    nodeTable->addKnownNode(Node(leastRecentlySeenNodeId, newEndpoint));
 
     // the bucket is still max size
     BOOST_CHECK_EQUAL(nodeTable->bucketSize(bucketIndex), 16);
@@ -725,8 +731,8 @@ BOOST_AUTO_TEST_CASE(neighboursSentAfterFindNode)
     auto const& nodeTable = nodeTableHost.nodeTable;
     KeyPair newNodeKeyPair = KeyPair::create();
     NodeID newNodeId = newNodeKeyPair.pub();
-    nodeTable->addNode(
-        Node(newNodeId, NodeIPEndpoint(bi::address::from_string(c_localhostIp), listenPort, listenPort)), RLPXDatagramFace::secondsSinceEpoch(), RLPXDatagramFace::secondsSinceEpoch() /* Makes node table think that endpoint proof has been completed */);
+    nodeTable->addKnownNode(Node(newNodeId,
+        NodeIPEndpoint(bi::address::from_string(c_localhostIp), listenPort, listenPort)));
 
     // Create and send the FindNode packet from the new "node"
     KeyPair target = KeyPair::create();
@@ -782,8 +788,7 @@ BOOST_AUTO_TEST_CASE(evictionWithOldNodeAnswering)
     auto nodeEndpoint = NodeIPEndpoint{bi::address::from_string(c_localhostIp), nodePort, nodePort};
     auto nodeKeyPair = KeyPair::create();
     auto nodeId = nodeKeyPair.pub();
-    nodeTable->addNode(Node{nodeId, nodeEndpoint}, RLPXDatagramFace::secondsSinceEpoch(),
-        RLPXDatagramFace::secondsSinceEpoch());
+    nodeTable->addKnownNode(Node{nodeId, nodeEndpoint});
 
     unique_ptr<TestNodeTableEventHandler> eventHandler(new TestNodeTableEventHandler);
     concurrent_queue<NodeID>& evictEvents = eventHandler->scheduledForEviction;
@@ -810,8 +815,7 @@ BOOST_AUTO_TEST_CASE(evictionWithOldNodeAnswering)
     // port doesn't matter, it won't be pinged because we're adding it as known
     auto newNodeEndpoint =
         NodeIPEndpoint{bi::address::from_string(c_localhostIp), nodePort, nodePort};
-    nodeTable->addNode(Node{newNodeId, newNodeEndpoint}, RLPXDatagramFace::secondsSinceEpoch(),
-        RLPXDatagramFace::secondsSinceEpoch());
+    nodeTable->addKnownNode(Node{newNodeId, newNodeEndpoint});
 
     // wait for eviction
     evictEvents.pop(chrono::seconds(5));
@@ -871,8 +875,7 @@ BOOST_AUTO_TEST_CASE(evictionWithOldNodeDropped)
     // port doesn't matter, it won't be pinged because we're adding it as known
     auto const port = getRandomPortNumber();
     auto newNodeEndpoint = NodeIPEndpoint{bi::address::from_string(c_localhostIp), port, port };
-    nodeTable->addNode(Node{newNodeId, newNodeEndpoint}, RLPXDatagramFace::secondsSinceEpoch(),
-        RLPXDatagramFace::secondsSinceEpoch());
+    nodeTable->addKnownNode(Node{newNodeId, newNodeEndpoint});
 
     // wait for PING time out
     this_thread::sleep_for(std::chrono::seconds(6));
