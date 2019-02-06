@@ -118,11 +118,9 @@ bool NodeTable::addNode(Node const& _node, NodeRelation _relation)
 
     // Log here to avoid holding the x_nodes mutex longer than necessary
     if (bFound)
-        LOG(m_logger) << "Node " << _node.id << "@" << _node.endpoint
-                      << " is already in the node table";
+        LOG(m_logger) << _node << " is already in the node table";
     else
-        LOG(m_logger) << (_relation == Known ? "Known" : "Pending") << " node " << _node.id << "@"
-                      << _node.endpoint;
+        LOG(m_logger) << (_relation == Known ? "Known " : "Pending ") << _node;
 
     if (_relation == Known)
     {
