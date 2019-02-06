@@ -823,14 +823,16 @@ bytes Host::saveNetwork() const
         return bytes{};
     }
 
+    // FIXME: Should be vector?
     std::list<Peer> peers;
     {
         RecursiveGuard l(x_sessions);
-        for (auto p: m_peers)
+        for (auto const& p: m_peers)
             if (p.second)
                 peers.push_back(*p.second);
     }
-    peers.sort();
+    // FIXME: Buggy, depends on converting Peer to bool.
+    // peers.sort();
 
     RLPStream network;
     int count = 0;
@@ -848,7 +850,7 @@ bytes Host::saveNetwork() const
         {
             network.appendList(11);
             p.endpoint.streamRLP(network, NodeIPEndpoint::StreamInline);
-            network << p.id << (p.peerType == PeerType::Required ? true : false)
+            network << p.id << (p.peerType == PeerType::Required)
                     << chrono::duration_cast<chrono::seconds>(p.m_lastConnected.time_since_epoch()).count()
                     << chrono::duration_cast<chrono::seconds>(p.m_lastAttempted.time_since_epoch()).count()
                     << p.m_failedAttempts.load() << (unsigned)p.m_lastDisconnect << p.m_score.load()
@@ -860,7 +862,8 @@ bytes Host::saveNetwork() const
     if (auto nodeTable = this->nodeTable())
     {
         auto state = nodeTable->snapshot();
-        state.sort();
+        // FIXME:
+        // state.sort();
         for (auto const& entry: state)
         {
             network.appendList(4);

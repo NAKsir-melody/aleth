@@ -1102,10 +1102,6 @@ BOOST_AUTO_TEST_CASE(unspecifiedNode)
 
     Node node(Public(sha3("0")), NodeIPEndpoint(bi::address(), 0, 0));
     BOOST_REQUIRE(node);
-    BOOST_REQUIRE(n != node);
-
-    Node nodeEq(Public(sha3("0")), NodeIPEndpoint(bi::address(), 0, 0));
-    BOOST_REQUIRE_EQUAL(node, nodeEq);
 }
 
 BOOST_AUTO_TEST_CASE(nodeTableReturnsUnspecifiedNode)
@@ -1115,8 +1111,6 @@ BOOST_AUTO_TEST_CASE(nodeTableReturnsUnspecifiedNode)
     NodeTable t(io, KeyPair::create(), NodeIPEndpoint(bi::address::from_string(c_localhostIp), port, port));
     if (Node n = t.node(NodeID()))
         BOOST_REQUIRE(false);
-    else
-        BOOST_REQUIRE(n == UnspecifiedNode);
 }
 
 BOOST_AUTO_TEST_SUITE_END()
