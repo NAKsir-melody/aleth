@@ -13,6 +13,7 @@ set(unittest_sources
     unittests/libdevcore/RangeMask.cpp
     unittests/libdevcore/RLP.cpp
     unittests/libdevcore/SSZ.cpp
+    unittests/libdevcore/SSZ_trie.cpp
 
     unittests/libdevcrypto/AES.cpp
 

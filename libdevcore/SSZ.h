@@ -23,8 +23,6 @@
 namespace dev
 {
 
-class SSZ;
-
 /**
  * Class for interpreting SSZ data.
  */
@@ -32,8 +30,9 @@ class SSZ
 {
 public:
 	SSZ() {}
+
 	/// Construct a node of value given in the bytes.
-	explicit SSZ(bytesConstRef _d): m_data(_d){};
+	explicit SSZ(bytesConstRef _d): m_data(_d) {}
 
 	/// Construct a node of value given in the bytes.
 	explicit SSZ(bytes const& _d): SSZ(&_d) {}
@@ -46,17 +45,21 @@ public:
 
 	bytesConstRef data() const { return m_data; }
 
-	size_t length() const;
+	/// No value.
+	bool isNull() const { return m_data.size() == 0; }
 
-	bytesConstRef payload() const { auto l = length(); return m_data.cropped(0, l); }
+	/// Contains a zero-length string or zero-length list.
+	bool isEmpty() const { return !isNull(); }
 
-	std::string toString() const { return payload().cropped(0, length()).toString(); }
+	size_t itemCount() const { return isList() ? items() : 0; }
 
+	/// List value.
+	bool isList() const { return !isNull() && m_data[0] >= c_rlpListStart; }
+
+	/// @returns the number of data items.
+	size_t items() const;
 private:
 	bytesConstRef m_data;
 };
-
-/// Human readable version of RLP.
-std::ostream& operator<<(std::ostream& _out, dev::SSZ const& _d);
 
 }

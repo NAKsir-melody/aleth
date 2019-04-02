@@ -34,6 +34,30 @@ size_t SSZ::length() const
 	return ret;
 }
 
+size_t SSZ::itmes() const
+{
+// ret might be 2 or 17
+// in case of short node -> [bytes, bytes]
+// in case of extention node -> List17[{uint8, bytes}]
+	size_t ret = 0;
+	int index = 4;
+	size_t size = m_data.size();
+    //variable length
+    while(size) 
+    {
+        int prefix = 0;
+        prefix |= data[3] << 24;
+        prefix |= data[2] << 16;
+        prefix |= data[1] << 8;
+        prefix |= data[0] << 0;
+
+        size
+        
+        ret++;
+    }
+	return ret;
+}
+
 std::ostream& dev::operator<<(std::ostream& _out, SSZ const& _d)
 {
 	streamOut(_out, _d);

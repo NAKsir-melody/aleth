@@ -27,6 +27,8 @@
 #include "SHA3.h"
 #include "TrieCommon.h"
 
+#define SSZ_ENABLE 1
+
 namespace dev
 {
 
@@ -238,9 +240,13 @@ private:
     std::string atAux(RLP const& _here, NibbleSlice _key) const;
 
     void mergeAtAux(RLPStream& _out, RLP const& _replace, NibbleSlice _key, bytesConstRef _value);
+#if SSZ_ENABLE
+    bytes mergeAt(SSZ const& _replace, NibbleSlice _k, bytesConstRef _v, bool _inLine = false);
+    bytes mergeAt(SSZ const& _replace, h256 const& _replaceHash, NibbleSlice _k, bytesConstRef _v, bool _inLine = false);
+#else
     bytes mergeAt(RLP const& _replace, NibbleSlice _k, bytesConstRef _v, bool _inLine = false);
     bytes mergeAt(RLP const& _replace, h256 const& _replaceHash, NibbleSlice _k, bytesConstRef _v, bool _inLine = false);
-
+#endif
     bool deleteAtAux(RLPStream& _out, RLP const& _replace, NibbleSlice _key);
     bytes deleteAt(RLP const& _replace, NibbleSlice _k);
 
@@ -287,7 +293,9 @@ private:
     std::string node(h256 const& _h) const { return m_db->lookup(_h); }
 
     // These are low-level node insertion functions that just go straight through into the DB.
+    // DB에 key/value를 저장함 - key는 hash로 생성
     h256 forceInsertNode(bytesConstRef _v) { auto h = sha3(_v); forceInsertNode(h, _v); return h; }
+    // DB에 key/value를 저장함
     void forceInsertNode(h256 const& _h, bytesConstRef _v) { m_db->insert(_h, _v); }
     void forceKillNode(h256 const& _h) { m_db->kill(_h); }
 
@@ -295,8 +303,15 @@ private:
     // data is < 32 bytes. It can safely be used when pruning the trie but won't work correctly
     // for the special case of the root (which is always looked up via a hash). In that case,
     // use forceKillNode().
+    // data가 32byte보다 큰경우 data의 hash만 저장하도록 되어 있으므로, 
+    // data의 해시를 키로 가지는 레코드를 DB로 부터 삭제해야 한다.
+#if SSZ_ENABLE
+    void killNode(SSZ const& _d) { if (_d.data().size() >= 32) forceKillNode(sha3(_d.data())); }
+    void killNode(SSZ const& _d, h256 const& _h) { if (_d.data().size() >= 32) forceKillNode(_h); }
+#else
     void killNode(RLP const& _d) { if (_d.data().size() >= 32) forceKillNode(sha3(_d.data())); }
     void killNode(RLP const& _d, h256 const& _h) { if (_d.data().size() >= 32) forceKillNode(_h); }
+#endif
 
     h256 m_root;
     DB* m_db = nullptr;
@@ -774,12 +789,16 @@ template <class KeyType, class DB> typename SpecificTrieDB<KeyType, DB>::iterato
     return ret;
 }
 
+//trie 삽입
 template <class DB> void GenericTrieDB<DB>::insert(bytesConstRef _key, bytesConstRef _value)
 {
     std::string rootValue = node(m_root);
     assert(rootValue.size());
+#if SSZ_ENABLE
+    bytes b = mergeAt(SSZ(rootValue), m_root, NibbleSlice(_key), _value);
+#else
     bytes b = mergeAt(RLP(rootValue), m_root, NibbleSlice(_key), _value);
-
+#endif
     // mergeAt won't attempt to delete the node if it's less than 32 bytes
     // However, we know it's the root node and thus always hashed.
     // So, if it's less than 32 (and thus should have been deleted but wasn't) then we delete it here.
@@ -825,18 +844,29 @@ template <class DB> std::string GenericTrieDB<DB>::atAux(RLP const& _here, Nibbl
     }
 }
 
+//rlp레벨에서 data를 merge한다.(wrapper)
+#if SSZ_ENABLE
+template <class DB> bytes GenericTrieDB<DB>::mergeAt(SSZ const& _orig, NibbleSlice _k, bytesConstRef _v, bool _inLine)
+#else
 template <class DB> bytes GenericTrieDB<DB>::mergeAt(RLP const& _orig, NibbleSlice _k, bytesConstRef _v, bool _inLine)
+#endif
 {
     return mergeAt(_orig, sha3(_orig.data()), _k, _v, _inLine);
 }
 
+//rlp레벨에서 data를 merge한다.
+#if SSZ_ENABLE
+template <class DB> bytes GenericTrieDB<DB>::mergeAt(SSZ const& _orig, h256 const& _origHash, NibbleSlice _k, bytesConstRef _v, bool _inLine)
+#else
 template <class DB> bytes GenericTrieDB<DB>::mergeAt(RLP const& _orig, h256 const& _origHash, NibbleSlice _k, bytesConstRef _v, bool _inLine)
+#endif
 {
     // The caller will make sure that the bytes are inserted properly.
     // - This might mean inserting an entry into m_over
     // We will take care to ensure that (our reference to) _orig is killed.
 
     // Empty - just insert here
+    // 빈트라이라면 바로 삽입
     if (_orig.isEmpty())
         return place(_orig, _k, _v);
 
@@ -848,13 +878,15 @@ template <class DB> bytes GenericTrieDB<DB>::mergeAt(RLP const& _orig, h256 cons
         NibbleSlice k = keyOf(_orig);
 
         // exactly our node - place value in directly.
+        // 숏노드의 값을 그대로 갱신
         if (k == _k && isLeaf(_orig))
             return place(_orig, _k, _v);
 
         // partial key is our key - move down.
+        // 삽입하려는 키가 기존의 키보다 크며, 기존키를 포함할때
         if (_k.contains(k) && !isLeaf(_orig))
         {
-            if (!_inLine)
+            if (!_inLine) //주로 _inLine = false이다
                 killNode(_orig, _origHash);
             RLPStream s(2);
             s.append(_orig[0]);
@@ -867,12 +899,15 @@ template <class DB> bytes GenericTrieDB<DB>::mergeAt(RLP const& _orig, h256 cons
         if (sh)
         {
             // shared stuff - cleve at disagreement.
+            // 서로 일부만 키가 겹칠때
             auto cleved = cleve(_orig, sh);
+            // 불일치하는 부분과, 새로운 키/값 쌍을 머지한다
             return mergeAt(RLP(cleved), _k, _v, true);
         }
         else
         {
             // nothing shared - branch
+            //아무키도 겹치지 않을때 - branch한다
             auto branched = branch(_orig);
             return mergeAt(RLP(branched), _k, _v, true);
         }
@@ -901,7 +936,9 @@ template <class DB> bytes GenericTrieDB<DB>::mergeAt(RLP const& _orig, h256 cons
     }
 
 }
-
+// 상위 노드의 데이터를 하나의 하위노드로 만들고, 
+// 해당하위노드와 새로들어온 노드를 merge한후,
+// 상위노드의 데이터에 바이트 스트림을 추가한다
 template <class DB> void GenericTrieDB<DB>::mergeAtAux(RLPStream& _out, RLP const& _orig, NibbleSlice _k, bytesConstRef _v)
 {
     RLP r = _orig;
@@ -1065,16 +1102,29 @@ template <class DB> bool GenericTrieDB<DB>::deleteAtAux(RLPStream& _out, RLP con
     return true;
 }
 
+// 노드에 값을 쓰는 함수
+#if SSZ_ENABLE
+template <class DB> bytes GenericTrieDB<DB>::place(SSZ const& _orig, NibbleSlice _k, bytesConstRef _s)
+#else
 template <class DB> bytes GenericTrieDB<DB>::place(RLP const& _orig, NibbleSlice _k, bytesConstRef _s)
+#endif
 {
+    //node clear
     killNode(_orig);
+
+    return bytes("");
+
+    //트라이가 비었다면.
     if (_orig.isEmpty())
         return rlpList(hexPrefixEncode(_k, true), _s);
 
     assert(_orig.isList() && (_orig.itemCount() == 2 || _orig.itemCount() == 17));
+    //Short node라면.
+    //값(orig[1])만 _s로 교체한다
     if (_orig.itemCount() == 2)
         return rlpList(_orig[0], _s);
 
+    //Extention node라면 value에 값을 쓴다
     auto s = RLPStream(17);
     for (unsigned i = 0; i < 16; ++i)
         s << _orig[i];

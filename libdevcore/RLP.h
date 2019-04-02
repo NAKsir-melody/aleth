@@ -453,6 +453,7 @@ template <class _T, class ... _Ts> void rlpListAux(RLPStream& _out, _T _t, _Ts .
 template <class _T> bytes rlp(_T _t) { return (RLPStream() << _t).out(); }
 
 /// Export a list of items in RLP format, returning a byte array.
+// RLP스트림으로 부터 list bytes를 읽어온다
 inline bytes rlpList() { return RLPStream(0).out(); }
 template <class ... _Ts> bytes rlpList(_Ts ... _ts)
 {

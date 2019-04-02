@@ -24,6 +24,12 @@
 #include "Common.h"
 #include "RLP.h"
 
+#define SSZ_ENABLE 1
+
+#if SSZ_ENABLE 
+#include "SSZ.h"
+#endif
+
 namespace dev
 {
 extern const h256 EmptyTrie;
